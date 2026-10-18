@@ -11,12 +11,17 @@ const pool = require("./config/db");
 
 const app = express();
 
+
 app.use(
     cors({
-        origin: "http://localhost:5173",
+        origin: [
+            "http://localhost:5173",
+            "https://code-track-weld.vercel.app",
+        ],
         credentials: true,
     })
 );
+
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
