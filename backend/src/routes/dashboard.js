@@ -1,3 +1,4 @@
+
 const express = require("express");
 const pool = require("../config/db");
 const authenticateToken = require("../middleware/auth");
@@ -8,6 +9,7 @@ router.get("/", authenticateToken, async (req, res) => {
     try {
         const userId = req.user.userId;
 
+        // Fetch user details
         const userResult = await pool.query(
             `SELECT id, username, email, "createdAt"
              FROM "User"
@@ -22,6 +24,7 @@ router.get("/", authenticateToken, async (req, res) => {
             });
         }
 
+        // Fetch connected platform accounts
         const accountsResult = await pool.query(
             `SELECT
                 id,
@@ -29,6 +32,8 @@ router.get("/", authenticateToken, async (req, res) => {
                 username,
                 rating,
                 "maxRating",
+                "rank",
+                "maxRank",
                 "easyCount",
                 "mediumCount",
                 "hardCount"
@@ -38,6 +43,7 @@ router.get("/", authenticateToken, async (req, res) => {
             [userId]
         );
 
+        // Fetch daily statistics and previous-day values
         const statsResult = await pool.query(
             `SELECT
                 ds.id,
@@ -73,6 +79,7 @@ router.get("/", authenticateToken, async (req, res) => {
             [userId]
         );
 
+        // Calculate daily changes
         const dailyStats = statsResult.rows.map((stat) => ({
             ...stat,
 
@@ -92,6 +99,7 @@ router.get("/", authenticateToken, async (req, res) => {
                     : stat.acceptedCount - stat.previousAccepted,
         }));
 
+        // Return dashboard data
         res.status(200).json({
             success: true,
             user: userResult.rows[0],

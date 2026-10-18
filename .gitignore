@@ -1,6 +1,15 @@
 login.json
-login.json
 
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# Backend tools
 backend/.agents/
 backend/.claude/
 backend/.windsurf/

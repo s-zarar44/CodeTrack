@@ -1,13 +1,14 @@
 const express = require("express");
 const pool = require("../config/db");
 const authenticateToken = require("../middleware/auth");
-const { getLeetCodeStats } = require("../services/leetcode");
+const { getLeetCodeStats, getLeetCodeContestStats } = require("../services/leetcode");
+const { getCodeforcesProfile, getCodeforcesSyncData } = require("../services/codeforces");
 
 const router = express.Router();
 
 /*
  * CONNECT PLATFORM ACCOUNT
- * Currently supports LeetCode for the MVP.
+ * Supports LeetCode and Codeforces account connection.
  */
 router.post("/accounts", authenticateToken, async (req, res) => {
     try {
@@ -63,65 +64,82 @@ router.post("/accounts", authenticateToken, async (req, res) => {
         }
 
         /*
-         * For LeetCode:
-         * Verify the username BEFORE inserting anything
+         * Verify supported platform accounts before inserting anything
          * into PlatformAccount.
          */
         let stats = null;
+        let leetcodeContestStats = null;
+        let codeforcesProfile = null;
 
         if (platform === "LEETCODE") {
             try {
                 stats = await getLeetCodeStats(cleanUsername);
+                try {
+                    leetcodeContestStats = await getLeetCodeContestStats(cleanUsername);
+                } catch (contestError) {
+                    // Keep account connection working if contest-rating data is unavailable.
+                    console.error("LeetCode contest rating fetch error:", contestError.message);
+                }
             } catch (error) {
-                console.error(
-                    "LeetCode verification error:",
-                    error.message
-                );
+                console.error("LeetCode verification error:", error.message);
 
                 return res.status(400).json({
                     success: false,
                     message:
-                        error.message ||
-                        "Unable to verify LeetCode username",
+                        error.message || "Unable to verify LeetCode username",
+                });
+            }
+        } else if (platform === "CODEFORCES") {
+            try {
+                codeforcesProfile = await getCodeforcesProfile(cleanUsername);
+            } catch (error) {
+                console.error("Codeforces verification error:", error.message);
+
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        error.message || "Unable to verify Codeforces handle",
                 });
             }
         }
 
         /*
-         * Create the platform account only after
-         * successful LeetCode verification.
+         * Create the platform account only after successful verification.
          */
+
         const result = await pool.query(
             `INSERT INTO "PlatformAccount"
-             (
+            (
                 id,
                 platform,
                 username,
+                rating,
+                "maxRating",
+                "rank",
+                "maxRank",
                 "easyCount",
                 "mediumCount",
                 "hardCount",
                 "createdAt",
                 "updatedAt",
                 "userId"
-             )
-             VALUES (
+            )
+            VALUES (
                 gen_random_uuid()::text,
-                $1,
-                $2,
-                $3,
-                $4,
-                $5,
-                NOW(),
-                NOW(),
-                $6
-             )
-             RETURNING *`,
+                $1, $2, $3, $4, $5, $6, $7, $8, $9,
+                NOW(), NOW(), $10
+            )
+            RETURNING *`,
             [
                 platform,
                 cleanUsername,
-                stats?.easy || 0,
-                stats?.medium || 0,
-                stats?.hard || 0,
+                codeforcesProfile?.rating ?? leetcodeContestStats?.rating ?? null,
+                codeforcesProfile?.maxRating ?? null,
+                codeforcesProfile?.rank ?? null,
+                codeforcesProfile?.maxRank ?? null,
+                stats?.easy ?? 0,
+                stats?.medium ?? 0,
+                stats?.hard ?? 0,
                 req.user.userId,
             ]
         );
@@ -205,6 +223,8 @@ router.get("/accounts", authenticateToken, async (req, res) => {
                 username,
                 rating,
                 "maxRating",
+                "rank",
+                "maxRank",
                 "easyCount",
                 "mediumCount",
                 "hardCount",
@@ -266,6 +286,13 @@ router.get(
              * Fetch latest statistics from LeetCode.
              */
             const stats = await getLeetCodeStats(username);
+            let contestStats = null;
+            try {
+                contestStats = await getLeetCodeContestStats(username);
+            } catch (contestError) {
+                // Existing statistics should still sync if contest data is unavailable.
+                console.error("LeetCode contest rating fetch error:", contestError.message);
+            }
 
             /*
              * Update current LeetCode statistics.
@@ -276,12 +303,14 @@ router.get(
                     "easyCount" = $1,
                     "mediumCount" = $2,
                     "hardCount" = $3,
+                    rating = COALESCE($4, rating),
                     "updatedAt" = NOW()
-                 WHERE id = $4`,
+                 WHERE id = $5`,
                 [
                     stats.easy,
                     stats.medium,
                     stats.hard,
+                    contestStats?.rating ?? null,
                     platformAccountId,
                 ]
             );
@@ -326,6 +355,7 @@ router.get(
                 success: true,
                 message: "LeetCode synced successfully",
                 stats,
+                contestStats,
                 saved: true,
             });
         } catch (error) {
@@ -342,5 +372,73 @@ router.get(
     }
 );
 
+
+/*
+ * SYNC CODEFORCES STATISTICS
+ */
+router.get(
+    "/codeforces/:username/stats",
+    authenticateToken,
+    async (req, res) => {
+        try {
+            const username = req.params.username.trim();
+            const accountResult = await pool.query(
+                `SELECT id
+                 FROM "PlatformAccount"
+                 WHERE "userId" = $1
+                 AND platform = 'CODEFORCES'
+                 AND username = $2`,
+                [req.user.userId, username]
+            );
+
+            if (accountResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Codeforces account is not connected",
+                });
+            }
+
+            const platformAccountId = accountResult.rows[0].id;
+            const result = await getCodeforcesSyncData(username);
+            const { profile, stats, ratingDistribution, dailySnapshots } = result;
+
+            await pool.query(
+                `UPDATE "PlatformAccount"
+                 SET rating = $1, "maxRating" = $2, "rank" = $3,
+                     "maxRank" = $4, "updatedAt" = NOW()
+                 WHERE id = $5`,
+                [profile.rating, profile.maxRating, profile.rank, profile.maxRank, platformAccountId]
+            );
+
+            for (const snapshot of dailySnapshots) {
+                await pool.query(
+                    `INSERT INTO "DailyStats"
+                     (id, date, "solvedCount", "submissionCount", "acceptedCount", streak, "platformAccountId")
+                     VALUES (gen_random_uuid()::text, $1::date, $2, $3, $4, 0, $5)
+                     ON CONFLICT ("platformAccountId", date)
+                     DO UPDATE SET "solvedCount" = EXCLUDED."solvedCount",
+                                   "submissionCount" = EXCLUDED."submissionCount",
+                                   "acceptedCount" = EXCLUDED."acceptedCount"`,
+                    [snapshot.date, snapshot.solvedCount, snapshot.submissionCount, snapshot.acceptedCount, platformAccountId]
+                );
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: "Codeforces synced successfully",
+                profile,
+                stats,
+                ratingDistribution,
+                saved: true,
+            });
+        } catch (error) {
+            console.error("Codeforces stats error:", error.message);
+            return res.status(500).json({
+                success: false,
+                message: error.message || "Unable to sync Codeforces",
+            });
+        }
+    }
+);
 
 module.exports = router;
