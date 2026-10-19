@@ -441,4 +441,48 @@ router.get(
     }
 );
 
+
+/*
+ * UNLINK A CONNECTED PLATFORM ACCOUNT
+ */
+router.delete("/accounts/:platform", authenticateToken, async (req, res) => {
+    try {
+        const platform = req.params.platform.toUpperCase();
+
+        if (!["LEETCODE", "CODEFORCES"].includes(platform)) {
+            return res.status(400).json({
+                success: false,
+                message: "Unsupported platform",
+            });
+        }
+
+        const result = await pool.query(
+            `DELETE FROM "PlatformAccount"
+             WHERE "userId" = $1
+               AND platform = $2
+             RETURNING id, platform, username`,
+            [req.user.userId, platform]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Connected platform account not found",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `${platform} account unlinked successfully`,
+        });
+    } catch (error) {
+        console.error("Unlink platform error:", error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to unlink platform account",
+        });
+    }
+});
+
 module.exports = router;

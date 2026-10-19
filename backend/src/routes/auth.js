@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const { Resend } = require("resend");
 const { OAuth2Client } = require("google-auth-library");
 const pool = require("../config/db");
+const authenticateToken = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -456,6 +457,39 @@ router.post("/google", async (req, res) => {
         return res.status(401).json({
             success: false,
             message: "Google sign-in failed. Please try again.",
+        });
+    }
+});
+
+// DELETE ENTIRE CODETRACK ACCOUNT
+router.delete("/account", authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+
+        const result = await pool.query(
+            `DELETE FROM "User"
+             WHERE id = $1
+             RETURNING id`,
+            [userId]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Account not found",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Account deleted successfully",
+        });
+    } catch (error) {
+        console.error("Delete account error:", error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to delete account",
         });
     }
 });
