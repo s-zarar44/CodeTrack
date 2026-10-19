@@ -113,6 +113,8 @@ function App() {
   const [historyMetric, setHistoryMetric] = useState("solved");
   const [syncingCodeforces, setSyncingCodeforces] = useState(false);
   const [syncingAccounts, setSyncingAccounts] = useState(false);
+  const [unlinkingPlatform, setUnlinkingPlatform] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const showToast = (text) => setToastMessage(text);
 
@@ -654,6 +656,69 @@ function App() {
       setMessage(error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // --------------------------------------------------
+  // UNLINK PLATFORM / DELETE ACCOUNT
+  // --------------------------------------------------
+
+  const unlinkPlatform = async (platform) => {
+    const platformName = platform === "LEETCODE" ? "LeetCode" : "Codeforces";
+    if (!window.confirm(`Unlink your ${platformName} account from CodeTrack? Your CodeTrack account will remain active.`)) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) { logout(); return; }
+
+    setUnlinkingPlatform(platform);
+    setMessage("");
+    try {
+      const response = await fetch(`${API_URL}/api/platform/accounts/${platform}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || `Unable to unlink ${platformName}`);
+
+      await fetchDashboard();
+      showToast(`${platformName} account unlinked successfully.`);
+    } catch (error) {
+      console.error(`Unlink ${platformName} error:`, error);
+      setMessage(error.message || `Unable to unlink ${platformName}.`);
+    } finally {
+      setUnlinkingPlatform("");
+    }
+  };
+
+  const deleteAccount = async () => {
+    const confirmed = window.confirm(
+      "Permanently delete your CodeTrack account? This will remove your account and associated CodeTrack data. This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) { logout(); return; }
+
+    setDeletingAccount(true);
+    setMessage("");
+    try {
+      const response = await fetch(`${API_URL}/api/auth/account`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to delete account");
+
+      logout();
+      setMessage("");
+      setMode("login");
+      setForm({ email: "", username: "", password: "" });
+      setMessage("Your CodeTrack account has been deleted.");
+    } catch (error) {
+      console.error("Delete account error:", error);
+      setMessage(error.message || "Unable to delete account.");
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -1205,8 +1270,13 @@ function App() {
                             </div>
                           )}
                         </div>
-                        {platform.platform === "LEETCODE" && <button className="sync-btn platform-sync-btn" onClick={() => syncLeetCode()} disabled={syncing || syncingAccounts}>{syncing ? "Syncing..." : "Sync LeetCode"}</button>}
-                        {platform.platform === "CODEFORCES" && <button className="sync-btn platform-sync-btn" onClick={() => syncCodeforces()} disabled={syncingCodeforces || syncingAccounts}>{syncingCodeforces ? "Syncing..." : "Sync Codeforces"}</button>}
+                        <div className="platform-card-actions">
+                          {platform.platform === "LEETCODE" && <button className="sync-btn platform-sync-btn" onClick={() => syncLeetCode()} disabled={syncing || syncingAccounts || Boolean(unlinkingPlatform) || deletingAccount}>{syncing ? "Syncing..." : "Sync LeetCode"}</button>}
+                          {platform.platform === "CODEFORCES" && <button className="sync-btn platform-sync-btn" onClick={() => syncCodeforces()} disabled={syncingCodeforces || syncingAccounts || Boolean(unlinkingPlatform) || deletingAccount}>{syncingCodeforces ? "Syncing..." : "Sync Codeforces"}</button>}
+                          <button type="button" className="unlink-btn" onClick={() => unlinkPlatform(platform.platform)} disabled={Boolean(unlinkingPlatform) || deletingAccount || syncing || syncingCodeforces || syncingAccounts}>
+                            {unlinkingPlatform === platform.platform ? "Unlinking..." : "Unlink"}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1259,6 +1329,15 @@ function App() {
               <section className="section settings-section">
                 <div className="section-head"><div><h2>Session</h2></div></div>
                 <div className="settings-card settings-session"><div><h3>Sign out of CodeTrack</h3><p>You can sign back in anytime with your account credentials.</p></div><button className="logout-btn" onClick={logout}>Logout</button></div>
+              </section>
+              <section className="section settings-section">
+                <div className="section-head"><div><h2>Danger zone</h2></div></div>
+                <div className="settings-card settings-danger-zone">
+                  <div><h3>Delete CodeTrack account</h3><p>Permanently delete your account and its associated CodeTrack data. This action cannot be undone.</p></div>
+                  <button type="button" className="delete-account-btn" onClick={deleteAccount} disabled={deletingAccount || Boolean(unlinkingPlatform)}>
+                    {deletingAccount ? "Deleting account..." : "Delete Account"}
+                  </button>
+                </div>
               </section>
             </>
           )}

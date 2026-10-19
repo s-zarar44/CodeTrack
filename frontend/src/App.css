@@ -1315,3 +1315,72 @@ input:focus-visible {
 @media (max-width: 600px) {
   .sync-toast { right: 16px; bottom: 16px; }
 }
+
+
+/* Platform unlink actions: compact red outline inspired by the Submissions toggle. */
+.platform-card-actions {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  align-self: end;
+}
+.platform-page-card .platform-card-actions .platform-sync-btn {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+.unlink-btn {
+  flex-shrink: 0;
+  border: 1px solid rgba(242, 105, 122, .52);
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: rgba(242, 105, 122, .08);
+  color: #ff9aa7;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .2s ease, border-color .2s ease, color .2s ease, transform .15s ease;
+}
+.unlink-btn:hover:not(:disabled),
+.unlink-btn:active:not(:disabled) {
+  background: #f2697a;
+  border-color: #f2697a;
+  color: #fff;
+}
+.unlink-btn:active:not(:disabled) { transform: translateY(1px); }
+.unlink-btn:disabled { opacity: .55; cursor: not-allowed; }
+.settings-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-color: rgba(242, 105, 122, .3);
+}
+.settings-danger-zone h3 { margin-bottom: 6px; font-size: 14px; }
+.settings-danger-zone p { color: var(--ct-muted); font-size: 12px; line-height: 1.6; }
+.delete-account-btn {
+  flex-shrink: 0;
+  border: 1px solid rgba(242, 105, 122, .52);
+  border-radius: 9px;
+  padding: 9px 13px;
+  background: rgba(242, 105, 122, .1);
+  color: #ff9aa7;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease, color .2s ease, transform .15s ease;
+}
+.delete-account-btn:hover:not(:disabled),
+.delete-account-btn:active:not(:disabled) { background: #f2697a; border-color: #f2697a; color: #fff; }
+.delete-account-btn:active:not(:disabled) { transform: translateY(1px); }
+.delete-account-btn:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 600px) {
+  .platform-page-card .platform-card-actions { grid-column: 1; grid-row: 3; align-items: stretch; gap: 8px; }
+  .platform-card-actions .platform-sync-btn { flex: 1; }
+  .unlink-btn { padding: 7px 9px; }
+  .settings-danger-zone { align-items: flex-start; flex-direction: column; }
+}
