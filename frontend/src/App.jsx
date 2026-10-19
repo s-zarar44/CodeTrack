@@ -82,7 +82,7 @@ const CodeforcesIcon = () => (
 function App() {
   const [mode, setMode] = useState("login");
   const [showPassword, setShowPassword] = useState(false);
-  const [view, setView] = useState("auth");
+  const [view, setView] = useState(() => (localStorage.getItem("token") ? "auth" : "welcome"));
   const [selectedPage, setSelectedPage] = useState("overview");
   const [menuOpen, setMenuOpen] = useState(false);
   const [showHeader, setShowHeader] = useState(true);
@@ -136,11 +136,13 @@ function App() {
 
         setMessage(data.message || (response.ok ? "Email verified successfully." : "Unable to verify email."));
         setMode("login");
+        setView("auth");
         setForm((current) => ({ ...current, password: "" }));
       } catch (error) {
         console.error("Email verification error:", error);
         setMessage("Unable to verify your email. Please try again.");
         setMode("login");
+        setView("auth");
       } finally {
         params.delete("verifyToken");
         const query = params.toString();
@@ -321,6 +323,7 @@ function App() {
       }
 
       setView("dashboard");
+      return data;
     } catch (error) {
       console.error("Dashboard error:", error);
       setMessage("Unable to load dashboard.");
@@ -425,6 +428,7 @@ function App() {
 
       setCodeforcesUsername("");
       await fetchDashboard();
+      await syncCodeforces(username, false);
       setMessage("Codeforces account connected successfully!");
     } catch (error) {
       console.error("Connect Codeforces error:", error);
@@ -558,7 +562,16 @@ function App() {
 
   useEffect(() => {
     if (localStorage.getItem("token")) {
-      fetchDashboard();
+      const loadDashboardAndSyncCodeforces = async () => {
+        const data = await fetchDashboard();
+        const codeforcesAccount = data?.platforms?.find(
+          (platform) => platform.platform === "CODEFORCES"
+        );
+        if (codeforcesAccount) {
+          await syncCodeforces(codeforcesAccount.username, false);
+        }
+      };
+      loadDashboardAndSyncCodeforces();
     }
   }, []);
 
@@ -926,62 +939,64 @@ function App() {
               </button>
             </div></div>
 
-            {platforms.length > 0 ? (
-              <div className="platform-grid">
-                {platforms.map((platform) => (
-                  <div className="platform-card" key={platform.id}>
-                    <div className="platform-identity">
-                      <div className={`platform-avatar platform-avatar-${platform.platform.toLowerCase()}`}>
-                        {platform.platform === "LEETCODE" ? <LeetCodeIcon /> : platform.platform === "CODEFORCES" ? <CodeforcesIcon /> : platform.platform.slice(0, 2)}
-                      </div>
-                      <div>
-                        <h3>{platform.platform === "LEETCODE" ? "LeetCode" : platform.platform === "CODEFORCES" ? "Codeforces" : platform.platform}</h3>
-                        <p><a className="platform-profile-link" href={platform.platform === "LEETCODE" ? `https://leetcode.com/${encodeURIComponent(platform.username)}/` : platform.platform === "CODEFORCES" ? `https://codeforces.com/profile/${encodeURIComponent(platform.username)}` : "#"} target="_blank" rel="noreferrer">@{platform.username}</a></p>
-                      </div>
+            <div className="platform-grid">
+              {platforms.map((platform) => (
+                <div className="platform-card" key={platform.id}>
+                  <div className="platform-identity">
+                    <div className={`platform-avatar platform-avatar-${platform.platform.toLowerCase()}`}>
+                      {platform.platform === "LEETCODE" ? <LeetCodeIcon /> : platform.platform === "CODEFORCES" ? <CodeforcesIcon /> : platform.platform.slice(0, 2)}
                     </div>
-
-                    <div className="rating">
-                      <span>Rating</span>
-                      <strong>{platform.rating ?? <span className="stat-dash">—</span>}</strong>
+                    <div>
+                      <h3>{platform.platform === "LEETCODE" ? "LeetCode" : platform.platform === "CODEFORCES" ? "Codeforces" : platform.platform}</h3>
+                      <p><a className="platform-profile-link" href={platform.platform === "LEETCODE" ? `https://leetcode.com/${encodeURIComponent(platform.username)}/` : platform.platform === "CODEFORCES" ? `https://codeforces.com/profile/${encodeURIComponent(platform.username)}` : "#"} target="_blank" rel="noreferrer">@{platform.username}</a></p>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="connect-card">
-                <h3>Connect LeetCode</h3>
 
-                <p>
-                  Connect your LeetCode account to start tracking your
-                  competitive programming activity.
-                </p>
+                  <div className="rating">
+                    <span>Rating</span>
+                    <strong>{platform.rating ?? <span className="stat-dash">—</span>}</strong>
+                  </div>
+                </div>
+              ))}
 
-                <form
-                  className="connect-form"
-                  onSubmit={connectLeetCode}
-                >
-                  <input
-                    type="text"
-                    placeholder="Enter LeetCode username"
-                    value={leetcodeUsername}
-                    onChange={(e) =>
-                      setLeetcodeUsername(e.target.value)
-                    }
-                    required
-                  />
+              {!platforms.some((platform) => platform.platform === "LEETCODE") && (
+                <div className="connect-card platform-connect-card">
+                  <h3>Connect LeetCode</h3>
+                  <p>Connect your LeetCode account to start tracking your competitive programming activity.</p>
+                  <form className="connect-form" onSubmit={connectLeetCode}>
+                    <input
+                      type="text"
+                      placeholder="Enter LeetCode username"
+                      value={leetcodeUsername}
+                      onChange={(e) => setLeetcodeUsername(e.target.value)}
+                      required
+                    />
+                    <button className="sync-btn" type="submit" disabled={connecting}>
+                      {connecting ? "Connecting..." : "Connect LeetCode"}
+                    </button>
+                  </form>
+                </div>
+              )}
 
-                  <button
-                    className="sync-btn"
-                    type="submit"
-                    disabled={connecting}
-                  >
-                    {connecting
-                      ? "Connecting..."
-                      : "Connect LeetCode"}
-                  </button>
-                </form>
-              </div>
-            )}
+              {!platforms.some((platform) => platform.platform === "CODEFORCES") && (
+                <div className="connect-card platform-connect-card">
+                  <h3>Connect Codeforces</h3>
+                  <p>Connect your Codeforces handle to display your current rating, maximum rating, and ranks.</p>
+                  <form className="connect-form" onSubmit={connectCodeforces}>
+                    <input
+                      type="text"
+                      placeholder="Enter Codeforces handle"
+                      value={codeforcesUsername}
+                      onChange={(e) => setCodeforcesUsername(e.target.value)}
+                      required
+                    />
+                    <button className="sync-btn" type="submit" disabled={connectingCodeforces}>
+                      {connectingCodeforces ? "Connecting..." : "Connect Codeforces"}
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
           </section>
 
           {/* LEETCODE PERFORMANCE */}
@@ -1347,6 +1362,89 @@ function App() {
   }
 
   // ==================================================
+  // WELCOME PAGE
+  // ==================================================
+
+  if (view === "welcome") {
+    const previewDifficulty = [
+      { name: "Easy", value: 342, color: DIFFICULTY_COLORS.easy },
+      { name: "Medium", value: 518, color: DIFFICULTY_COLORS.medium },
+      { name: "Hard", value: 176, color: DIFFICULTY_COLORS.hard },
+    ];
+    const previewHistory = [
+      { day: "Mon", solved: 8, accepted: 12, submissions: 19 },
+      { day: "Tue", solved: 13, accepted: 17, submissions: 25 },
+      { day: "Wed", solved: 10, accepted: 15, submissions: 22 },
+      { day: "Thu", solved: 18, accepted: 23, submissions: 31 },
+      { day: "Fri", solved: 15, accepted: 20, submissions: 28 },
+      { day: "Sat", solved: 24, accepted: 29, submissions: 38 },
+      { day: "Sun", solved: 20, accepted: 26, submissions: 34 },
+    ];
+    const openAuth = (nextMode) => {
+      setMode(nextMode);
+      setMessage("");
+      setEmailVerificationRequired(false);
+      setView("auth");
+    };
+
+    return (
+      <div className="welcome-page">
+        <div className="welcome-glow welcome-glow-one" aria-hidden="true" />
+        <div className="welcome-glow welcome-glow-two" aria-hidden="true" />
+        <header className="welcome-topbar">
+          <div className="welcome-brand">
+            <CodeTrackLogo className="welcome-logo" />
+            <div className="welcome-wordmark"><strong>CodeTrack</strong><span>COMPETITIVE PROGRAMMING ANALYTICS</span></div>
+          </div>
+          <button className="welcome-nav-login" type="button" onClick={() => openAuth("login")}>Login <span aria-hidden="true">↗</span></button>
+        </header>
+
+        <main className="welcome-main">
+          <section className="welcome-copy">
+            <span className="welcome-eyebrow"><span className="welcome-eyebrow-dot" /> YOUR PROGRESS, IN FOCUS</span>
+            <h1>Your coding journey.<br /><span>All in one place.</span></h1>
+            <p className="welcome-description">Bring your competitive programming activity together. Track problems solved, understand your progress, and build consistency across the platforms you use.</p>
+            <div className="welcome-actions">
+              <button className="welcome-primary-btn" type="button" onClick={() => openAuth("register")}>Get Started <span aria-hidden="true">→</span></button>
+              <button className="welcome-secondary-btn" type="button" onClick={() => openAuth("login")}>Login</button>
+            </div>
+
+            <div className="welcome-feature-grid">
+              <div className="welcome-feature-card"><span className="welcome-feature-icon feature-platforms"><IconGrid /></span><div><strong>Multiple platforms</strong><span>LeetCode &amp; Codeforces</span></div></div>
+              <div className="welcome-feature-card"><span className="welcome-feature-icon feature-analysis"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9h9A9 9 0 1 1 12 3Z"/><path d="M15 3.5A8 8 0 0 1 20.5 9H15Z"/></svg></span><div><strong>Problem analysis</strong><span>Easy, Medium &amp; Hard</span></div></div>
+              <div className="welcome-feature-card"><span className="welcome-feature-icon feature-history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="m6 15 4-5 4 3 6-7"/></svg></span><div><strong>History charts</strong><span>Visualize your progress</span></div></div>
+              <div className="welcome-feature-card"><span className="welcome-feature-icon feature-daily"><IconCalendar /></span><div><strong>Daily records</strong><span>Activity &amp; consistency</span></div></div>
+            </div>
+            <p className="welcome-supported-note"><span className="status-dot" /> Built for your coding journey</p>
+          </section>
+
+          <section className="welcome-preview-wrap" aria-label="Illustrative CodeTrack dashboard preview">
+            <div className="welcome-preview-heading"><div><span className="preview-eyebrow">DASHBOARD PREVIEW</span><h2>Your coding overview</h2></div><span className="preview-live-pill"><span className="status-dot" /> Preview</span></div>
+            <div className="welcome-preview-stats">
+              <div className="welcome-preview-stat preview-stat-featured"><span>Total problems solved</span><strong>1,036</strong><small>Across connected platforms</small></div>
+              <div className="welcome-preview-stat"><span>Active days</span><strong>24 <small>days</small></strong><small>This month</small></div>
+            </div>
+            <div className="welcome-preview-panel preview-difficulty-panel">
+              <div className="preview-panel-heading"><div><h3>Problems by difficulty</h3><p>Solved problem distribution</p></div><span className="preview-panel-icon">◔</span></div>
+              <div className="preview-difficulty-content">
+                <div className="preview-pie-wrap"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={previewDifficulty} dataKey="value" nameKey="name" innerRadius="65%" outerRadius="88%" paddingAngle={3} stroke="none">{previewDifficulty.map((item) => <Cell key={item.name} fill={item.color} />)}</Pie><Tooltip contentStyle={{ background: "#121a26", border: "1px solid #243249", borderRadius: 8, color: "#eef4ff" }} /></PieChart></ResponsiveContainer><div className="preview-pie-center"><strong>1,036</strong><span>SOLVED</span></div></div>
+                <div className="preview-difficulty-legend">{previewDifficulty.map((item) => <div className="preview-legend-row" key={item.name}><span className="preview-legend-label"><i style={{ background: item.color }} />{item.name}</span><strong>{item.value}</strong></div>)}</div>
+              </div>
+            </div>
+            <div className="welcome-preview-panel preview-history-panel">
+              <div className="preview-panel-heading"><div><h3>Activity history</h3><p>Your coding activity over time</p></div><span className="preview-history-range">7 days</span></div>
+              <div className="preview-history-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={previewHistory} margin={{ top: 8, right: 7, left: -24, bottom: 0 }}><CartesianGrid stroke="#243249" strokeDasharray="3 3" vertical={false} /><XAxis dataKey="day" tick={{ fill: "#8197b5", fontSize: 10 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: "#8197b5", fontSize: 10 }} axisLine={false} tickLine={false} /><Tooltip contentStyle={{ background: "#121a26", border: "1px solid #243249", borderRadius: 8, color: "#eef4ff" }} /><Line type="monotone" dataKey="solved" name="Solved" stroke={HISTORY_COLORS.solved} strokeWidth={2.4} dot={false} /><Line type="monotone" dataKey="accepted" name="Accepted" stroke={HISTORY_COLORS.accepted} strokeWidth={2} dot={false} /><Line type="monotone" dataKey="submissions" name="Submissions" stroke={HISTORY_COLORS.submissions} strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div>
+              <div className="preview-chart-legend"><span><i style={{ background: HISTORY_COLORS.solved }} />Solved</span><span><i style={{ background: HISTORY_COLORS.accepted }} />Accepted</span><span><i style={{ background: HISTORY_COLORS.submissions }} />Submissions</span></div>
+            </div>
+            <p className="preview-disclaimer">Illustrative sample data · Your dashboard shows your synced statistics.</p>
+          </section>
+        </main>
+        <footer className="welcome-footer"><span>CodeTrack</span><span>Track consistency. Understand progress. Keep improving.</span></footer>
+      </div>
+    );
+  }
+
+  // ==================================================
   // LOGIN / REGISTER
   // ==================================================
 
@@ -1362,6 +1460,8 @@ function App() {
             <span className="auth-brand-caption">COMPETITIVE PROGRAMMING ANALYTICS</span>
           </div>
         </div>
+
+        <button type="button" className="auth-back-link" onClick={() => { setView("welcome"); setMessage(""); setEmailVerificationRequired(false); }}>← Back to welcome</button>
 
         <div className="auth-heading">
           <span className="auth-eyebrow">YOUR PROGRESS, IN FOCUS</span>
