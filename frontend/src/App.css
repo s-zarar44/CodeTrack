@@ -1414,7 +1414,8 @@ input:focus-visible {
 .welcome-copy { min-width:0; max-width:570px; }
 .welcome-eyebrow { display:inline-flex; align-items:center; gap:9px; margin-bottom:22px; color:#83b8ff; font-size:10px; font-weight:750; letter-spacing:1.6px; }
 .welcome-eyebrow-dot { width:7px; height:7px; border-radius:50%; background:var(--ct-blue); box-shadow:0 0 12px rgba(91,157,255,.65); }
-.welcome-copy h1 { margin:0; color:#f0f5ff; font-size:clamp(38px,4.1vw,60px); line-height:1.08; letter-spacing:-2.6px; font-weight:760; }
+.welcome-copy h1 { margin:0; color:#f0f5ff; font-size:clamp(38px,4.1vw,60px); line-height:1.08; letter-spacing:-2.6px; font-weight:760; animation:welcome-headline-slide-in 1s cubic-bezier(.22,.75,.25,1) both; }
+@keyframes welcome-headline-slide-in { from { opacity:0; transform:translateX(-24px); } to { opacity:1; transform:translateX(0); } }
 .welcome-copy h1 span { color:#80b4ff; }
 .welcome-description { max-width:510px; margin-top:22px; color:#9aacc5; font-size:15px; line-height:1.85; }
 .welcome-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:28px; }
